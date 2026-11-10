@@ -1,4 +1,4 @@
-import React, { useState, useEffect } from "react";
+import React, { useState, useEffect, useRef } from "react";
 import {
   LayoutDashboard,
   Package,
@@ -22,17 +22,22 @@ import {
   Menu,
   Trash2,
   Pencil,
+  LogOut,
+  LoaderCircle,
+  RefreshCw,
 } from "lucide-react";
+import { today, totalSale, profitSale } from "./data";
+import { signOut } from "firebase/auth";
+import { auth } from "./firebase.js";
 import {
-  seed,
-  uid,
-  today,
-  totalSale,
-  profitSale,
-  completeSale,
-  deleteProduct,
-  validDatabase,
-} from "./data";
+  emptyStore,
+  subscribeStore,
+  saveProduct,
+  saveSupplier,
+  removeRecord,
+  createSale,
+  firebaseMessage,
+} from "./store.js";
 import { formatMoney, saleDate, saleTime } from "./format.js";
 
 const nav = [
@@ -170,20 +175,52 @@ function Toy({ type = "blocks" }) {
     </svg>
   );
 }
-export default function App() {
-  const [db, setDb] = useState(() => {
-    try {
-      const data = JSON.parse(localStorage.getItem("juguetea-v1"));
-      return validDatabase(data)
-        ? {
-            ...data,
-            settings: { ...data.settings, name: "Juguetes", currency: "BOB" },
-          }
-        : structuredClone(seed);
-    } catch {
-      return structuredClone(seed);
-    }
-  });
+export default function App({ user }) {
+  const [db, setDb] = useState(emptyStore);
+  const [connection, setConnection] = useState("loading");
+  const [connectionError, setConnectionError] = useState("");
+  const [retry, setRetry] = useState(0);
+  const [saving, setSaving] = useState(false);
+  const savingRef = useRef(false);
+  useEffect(() => {
+    let active = true;
+    setConnection("loading");
+    setConnectionError("");
+    const timeout = setTimeout(() => {
+      if (active) {
+        setConnection("error");
+        setConnectionError(
+          "La conexión está tardando demasiado. Comprueba tu conexión y que Cloud Firestore esté habilitado.",
+        );
+      }
+    }, 20000);
+    const stop = subscribeStore(
+      (data) => {
+        if (!active) return;
+        clearTimeout(timeout);
+        setDb({
+          ...data,
+          settings: {
+            ...data.settings,
+            owner:
+              user.displayName || user.email?.split("@")[0] || "Administración",
+          },
+        });
+        setConnection("ready");
+      },
+      (error) => {
+        if (!active) return;
+        clearTimeout(timeout);
+        setConnectionError(firebaseMessage(error));
+        setConnection("error");
+      },
+    );
+    return () => {
+      active = false;
+      clearTimeout(timeout);
+      stop();
+    };
+  }, [user.uid, retry]);
   const [page, setPage] = useState("Inicio"),
     [query, setQuery] = useState(""),
     [category, setCategory] = useState("Todos"),
@@ -195,22 +232,16 @@ export default function App() {
     [customer, setCustomer] = useState(""),
     [payment, setPayment] = useState("QR");
   useEffect(() => {
-    try {
-      localStorage.setItem("juguetea-v1", JSON.stringify(db));
-    } catch {
-      setToast("No se pudo guardar: almacenamiento lleno. Exporta una copia.");
-    }
-  }, [db]);
-  useEffect(() => {
     if (toast) {
       const id = setTimeout(() => setToast(""), 4500);
       return () => clearTimeout(id);
     }
   }, [toast]);
   useEffect(() => {
-    if (!modal) return;
+    if (!modal || connection !== "ready") return;
     const previous = document.activeElement;
     const dialog = document.querySelector("[role=dialog]");
+    if (!dialog) return;
     const focusables = () => [
       ...dialog.querySelectorAll("button:not(:disabled),input,select,a[href]"),
     ];
@@ -235,7 +266,7 @@ export default function App() {
       document.removeEventListener("keydown", key);
       previous?.focus();
     };
-  }, [modal]);
+  }, [modal, connection]);
   const money = formatMoney;
   const products = db.products.filter((p) => !p.deleted);
   const navigate = (p) => {
@@ -325,15 +356,25 @@ export default function App() {
     );
     notify("Producto añadido a la venta");
   }
-  function checkout() {
+  async function performWrite(operation) {
+    if (savingRef.current) return;
+    savingRef.current = true;
+    setSaving(true);
     try {
-      const next = completeSale(db, cart, customer, payment);
-      setDb(next);
-      setCart([]);
-      setModal({ type: "receipt", sale: next.sales[0] });
-    } catch (e) {
-      notify(e.message);
+      await operation();
+    } catch (error) {
+      notify(firebaseMessage(error));
+    } finally {
+      savingRef.current = false;
+      setSaving(false);
     }
+  }
+  function checkout() {
+    performWrite(async () => {
+      const sale = await createSale(cart, customer, payment);
+      setCart([]);
+      setModal({ type: "receipt", sale });
+    });
   }
   const sumCart = cart.reduce(
     (a, i) =>
@@ -342,54 +383,13 @@ export default function App() {
   );
   function submit(e) {
     e.preventDefault();
-    const f = Object.fromEntries(new FormData(e.target));
-    try {
-      if (modal.type === "product") {
-        const p = {
-          ...f,
-          id: modal.item?.id || uid(),
-          price: Number(f.price),
-          cost: Number(f.cost),
-          stock: Number(f.stock),
-          min: Number(f.min),
-          art: f.art,
-          color: modal.item?.color || "#eeeafa",
-        };
-        if (
-          p.price < 0 ||
-          p.cost < 0 ||
-          p.stock < 0 ||
-          !Number.isInteger(p.stock) ||
-          p.min < 0
-        )
-          throw Error("Revisa precios y cantidades.");
-        if (
-          db.products.some(
-            (x) => x.sku.toLowerCase() === p.sku.toLowerCase() && x.id !== p.id,
-          )
-        )
-          throw Error("El SKU ya está en uso.");
-        setDb({
-          ...db,
-          products: modal.item
-            ? db.products.map((x) => (x.id === p.id ? p : x))
-            : [...db.products, p],
-        });
-      }
-      if (modal.type === "supplier") {
-        const supplier = { ...modal.item, ...f, id: modal.item?.id || uid() };
-        setDb({
-          ...db,
-          suppliers: modal.item
-            ? db.suppliers.map((s) => (s.id === supplier.id ? supplier : s))
-            : [...db.suppliers, supplier],
-        });
-      }
+    const fields = Object.fromEntries(new FormData(e.target));
+    performWrite(async () => {
+      if (modal.type === "product") await saveProduct(fields, modal.item);
+      if (modal.type === "supplier") await saveSupplier(fields, modal.item);
       setModal(null);
-      notify("Cambios guardados correctamente");
-    } catch (err) {
-      notify(err.message);
-    }
+      notify("Cambios guardados en Firebase");
+    });
   }
   function Header({ title, description, action }) {
     return (
@@ -473,8 +473,63 @@ export default function App() {
       </div>
     );
   }
+  if (connection !== "ready")
+    return (
+      <div className="access-page">
+        <section className="access-card">
+          <div className="access-brand">
+            <span className="brand-icon">
+              <Box size={27} />
+            </span>
+            Juguetes<span className="brand-dot">.</span>
+          </div>
+          {connection === "loading" ? (
+            <div className="connection-loading" role="status">
+              <LoaderCircle className="spin" size={27} />
+              Conectando con tu tienda…
+            </div>
+          ) : (
+            <>
+              <h1>No pudimos abrir tu tienda</h1>
+              <p role="alert">{connectionError}</p>
+              <p className="access-identifier">
+                Identificador de tu cuenta:
+                <br />
+                <code>{user.uid}</code>
+              </p>
+              <button
+                className="button primary full"
+                onClick={() => setRetry((n) => n + 1)}
+              >
+                <RefreshCw size={17} />
+                Volver a intentar
+              </button>
+            </>
+          )}
+          <button
+            className="button full"
+            onClick={() =>
+              signOut(auth).catch(() =>
+                setConnectionError("No se pudo cerrar la sesión."),
+              )
+            }
+          >
+            <LogOut size={16} />
+            Cerrar sesión
+          </button>
+        </section>
+      </div>
+    );
   return (
     <div className="app">
+      {saving && (
+        <div className="saving-overlay" role="status" aria-live="polite">
+          <span>
+            <LoaderCircle className="spin" size={23} />
+            Guardando en Firebase…
+          </span>
+        </div>
+      )}
       <div
         className={"shade " + (mobile ? "visible" : "")}
         onClick={() => setMobile(false)}
@@ -516,8 +571,17 @@ export default function App() {
             </span>
             <div>
               <strong>{db.settings.owner}</strong>
-              <small>Administración</small>
+              <small>{user.email}</small>
             </div>
+            <button
+              className="icon-button"
+              aria-label="Cerrar sesión"
+              onClick={() =>
+                signOut(auth).catch((error) => notify(firebaseMessage(error)))
+              }
+            >
+              <LogOut size={18} />
+            </button>
           </div>
         </div>
       </aside>
@@ -538,7 +602,7 @@ export default function App() {
           <div className="top-actions">
             <span className="demo-label">
               <i />
-              Espacio de demostración
+              Conectado a Firebase
             </span>
             <button
               className="notification icon-button"
@@ -568,7 +632,7 @@ export default function App() {
               <div className="overview-label">
                 <div>
                   <span className="section-dot" /> Resumen de tu negocio{" "}
-                  <span className="muted">· Datos de ejemplo</span>
+                  <span className="muted">· En tiempo real</span>
                 </div>
                 <select
                   value={period}
@@ -1372,16 +1436,13 @@ export default function App() {
                   </button>
                   <button
                     className="button danger"
-                    onClick={() => {
-                      setDb({
-                        ...db,
-                        suppliers: db.suppliers.map((s) =>
-                          s.id === modal.item.id ? { ...s, deleted: true } : s,
-                        ),
-                      });
-                      setModal(null);
-                      notify("Proveedor borrado correctamente");
-                    }}
+                    onClick={() =>
+                      performWrite(async () => {
+                        await removeRecord("proveedores", modal.item);
+                        setModal(null);
+                        notify("Proveedor borrado correctamente");
+                      })
+                    }
                   >
                     <Trash2 size={16} />
                     Borrar proveedor
@@ -1448,18 +1509,16 @@ export default function App() {
                   </button>
                   <button
                     className="button danger"
-                    onClick={() => {
-                      try {
-                        setDb(deleteProduct(db, modal.item.id));
+                    onClick={() =>
+                      performWrite(async () => {
+                        await removeRecord("productos", modal.item);
                         setCart(
                           cart.filter((i) => i.productId !== modal.item.id),
                         );
                         setModal(null);
                         notify("Producto eliminado del inventario");
-                      } catch (e) {
-                        notify(e.message);
-                      }
-                    }}
+                      })
+                    }
                   >
                     <Trash2 size={16} />
                     Eliminar producto
