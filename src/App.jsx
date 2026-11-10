@@ -22,13 +22,10 @@ import {
   Menu,
   Trash2,
   Pencil,
-  LogOut,
   LoaderCircle,
   RefreshCw,
 } from "lucide-react";
 import { today, totalSale, profitSale } from "./data";
-import { signOut } from "firebase/auth";
-import { auth } from "./firebase.js";
 import {
   emptyStore,
   subscribeStore,
@@ -175,7 +172,7 @@ function Toy({ type = "blocks" }) {
     </svg>
   );
 }
-export default function App({ user }) {
+export default function App() {
   const [db, setDb] = useState(emptyStore);
   const [connection, setConnection] = useState("loading");
   const [connectionError, setConnectionError] = useState("");
@@ -198,14 +195,7 @@ export default function App({ user }) {
       (data) => {
         if (!active) return;
         clearTimeout(timeout);
-        setDb({
-          ...data,
-          settings: {
-            ...data.settings,
-            owner:
-              user.displayName || user.email?.split("@")[0] || "Administración",
-          },
-        });
+        setDb(data);
         setConnection("ready");
       },
       (error) => {
@@ -220,7 +210,7 @@ export default function App({ user }) {
       clearTimeout(timeout);
       stop();
     };
-  }, [user.uid, retry]);
+  }, [retry]);
   const [page, setPage] = useState("Inicio"),
     [query, setQuery] = useState(""),
     [category, setCategory] = useState("Todos"),
@@ -492,11 +482,6 @@ export default function App({ user }) {
             <>
               <h1>No pudimos abrir tu tienda</h1>
               <p role="alert">{connectionError}</p>
-              <p className="access-identifier">
-                Identificador de tu cuenta:
-                <br />
-                <code>{user.uid}</code>
-              </p>
               <button
                 className="button primary full"
                 onClick={() => setRetry((n) => n + 1)}
@@ -506,17 +491,6 @@ export default function App({ user }) {
               </button>
             </>
           )}
-          <button
-            className="button full"
-            onClick={() =>
-              signOut(auth).catch(() =>
-                setConnectionError("No se pudo cerrar la sesión."),
-              )
-            }
-          >
-            <LogOut size={16} />
-            Cerrar sesión
-          </button>
         </section>
       </div>
     );
@@ -564,26 +538,6 @@ export default function App({ user }) {
             </button>
           ))}
         </nav>
-        <div className="sidebar-bottom">
-          <div className="user">
-            <span className="avatar">
-              {db.settings.owner.slice(0, 2).toUpperCase()}
-            </span>
-            <div>
-              <strong>{db.settings.owner}</strong>
-              <small>{user.email}</small>
-            </div>
-            <button
-              className="icon-button"
-              aria-label="Cerrar sesión"
-              onClick={() =>
-                signOut(auth).catch((error) => notify(firebaseMessage(error)))
-              }
-            >
-              <LogOut size={18} />
-            </button>
-          </div>
-        </div>
       </aside>
       <div className="workspace">
         <header className="topbar">
@@ -612,10 +566,6 @@ export default function App({ user }) {
               <Bell size={20} />
               <i />
             </button>
-            <span className="top-divider" />
-            <span className="avatar small">
-              {db.settings.owner.slice(0, 2).toUpperCase()}
-            </span>
           </div>
         </header>
         <main>
@@ -627,7 +577,7 @@ export default function App({ user }) {
                     Tu tienda de un vistazo <span className="wave">✦</span>
                   </>
                 }
-                description={`Hola, ${db.settings.owner}. Así va tu tienda hoy.`}
+                description="Resumen de ingresos, ventas y existencias."
               />
               <div className="overview-label">
                 <div>

@@ -10,11 +10,6 @@ export default defineConfig({
           )
             return "firebase-firestore";
           if (
-            id.includes("/node_modules/@firebase/auth/") ||
-            id.includes("/node_modules/firebase/auth/")
-          )
-            return "firebase-auth";
-          if (
             id.includes("/node_modules/@firebase/") ||
             id.includes("/node_modules/firebase/")
           )

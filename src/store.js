@@ -16,17 +16,10 @@ const path = (...parts) => ["tiendas", "principal", ...parts];
 const ref = (kind, id) => doc(firestore, ...path(kind, id));
 const skuId = (sku) => encodeURIComponent(sku.trim().toLowerCase());
 export const emptyStore = () => ({
-  settings: {
-    name: "Juguetes",
-    currency: "BOB",
-    owner: "Administración",
-    goal: 15000,
-  },
   products: [],
   suppliers: [],
   sales: [],
   customers: [],
-  imports: [],
 });
 
 export function subscribeStore(onChange, onError) {
@@ -143,11 +136,8 @@ export function createSale(cart, customerId, payment) {
 
 export function firebaseMessage(error) {
   if (error?.code === "permission-denied")
-    return "Tu usuario no tiene acceso a esta tienda. Solicita al administrador que habilite tu cuenta.";
-  if (
-    error?.code === "unavailable" ||
-    error?.code === "auth/network-request-failed"
-  )
+    return "Firestore no permite acceder a los datos. Publica las reglas de la aplicación en Firebase.";
+  if (error?.code === "unavailable")
     return "No se pudo conectar con Firebase. Revisa tu conexión e inténtalo de nuevo.";
   if (error?.code === "resource-exhausted")
     return "Firebase alcanzó su cuota de uso. Revisa el proyecto en la consola.";

@@ -1,11 +1,6 @@
 rules_version = '2';
 service cloud.firestore {
   match /databases/{database}/documents {
-    function isStaff() {
-      return request.auth != null
-        && exists(/databases/$(database)/documents/usuarios/$(request.auth.uid))
-        && get(/databases/$(database)/documents/usuarios/$(request.auth.uid)).data.activo == true;
-    }
     function validProduct(id) {
       let p = request.resource.data;
       return p.id == id && p.name is string && p.name.size() > 0
@@ -21,33 +16,29 @@ service cloud.firestore {
         && s.email is string && s.phone is string && s.country is string
         && s.deleted is bool && s.version is int;
     }
-    match /usuarios/{uid} {
-      allow get: if request.auth != null && request.auth.uid == uid;
-      allow list, create, update, delete: if false;
-    }
     match /tiendas/principal/productos/{id} {
-      allow read: if isStaff();
-      allow create: if isStaff() && validProduct(id) && request.resource.data.version == 1;
-      allow update: if isStaff() && validProduct(id) && request.resource.data.version == resource.data.version + 1;
+      allow read: if true;
+      allow create: if validProduct(id) && request.resource.data.version == 1;
+      allow update: if validProduct(id) && request.resource.data.version == resource.data.version + 1;
       allow delete: if false;
     }
     match /tiendas/principal/proveedores/{id} {
-      allow read: if isStaff();
-      allow create: if isStaff() && validSupplier(id) && request.resource.data.version == 1;
-      allow update: if isStaff() && validSupplier(id) && request.resource.data.version == resource.data.version + 1;
+      allow read: if true;
+      allow create: if validSupplier(id) && request.resource.data.version == 1;
+      allow update: if validSupplier(id) && request.resource.data.version == resource.data.version + 1;
       allow delete: if false;
     }
     match /tiendas/principal/ventas/{id} {
-      allow read: if isStaff();
-      allow create: if isStaff() && request.resource.data.id == id
+      allow read: if true;
+      allow create: if request.resource.data.id == id
         && request.resource.data.date is string
         && request.resource.data.payment in ['QR', 'Efectivo']
         && request.resource.data.items is list && request.resource.data.items.size() > 0;
       allow update, delete: if false;
     }
     match /tiendas/principal/skus/{id} {
-      allow read, delete: if isStaff();
-      allow create, update: if isStaff() && request.resource.data.productId is string;
+      allow read, delete: if true;
+      allow create, update: if request.resource.data.productId is string;
     }
     match /{document=**} {
       allow read, write: if false;
