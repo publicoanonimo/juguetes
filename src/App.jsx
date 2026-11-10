@@ -23,7 +23,6 @@ import {
   Trash2,
   Pencil,
   LoaderCircle,
-  RefreshCw,
 } from "lucide-react";
 import { today, totalSale, profitSale } from "./data";
 import {
@@ -174,43 +173,28 @@ function Toy({ type = "blocks" }) {
 }
 export default function App() {
   const [db, setDb] = useState(emptyStore);
-  const [connection, setConnection] = useState("loading");
-  const [connectionError, setConnectionError] = useState("");
-  const [retry, setRetry] = useState(0);
+  const [dataReady, setDataReady] = useState(false);
   const [saving, setSaving] = useState(false);
   const savingRef = useRef(false);
   useEffect(() => {
     let active = true;
-    setConnection("loading");
-    setConnectionError("");
-    const timeout = setTimeout(() => {
-      if (active) {
-        setConnection("error");
-        setConnectionError(
-          "La conexión está tardando demasiado. Comprueba tu conexión y que Cloud Firestore esté habilitado.",
-        );
-      }
-    }, 20000);
     const stop = subscribeStore(
       (data) => {
         if (!active) return;
-        clearTimeout(timeout);
         setDb(data);
-        setConnection("ready");
+        setDataReady(true);
       },
       (error) => {
         if (!active) return;
-        clearTimeout(timeout);
-        setConnectionError(firebaseMessage(error));
-        setConnection("error");
+        setDataReady(false);
+        console.error("Error al leer los datos de la tienda:", error);
       },
     );
     return () => {
       active = false;
-      clearTimeout(timeout);
       stop();
     };
-  }, [retry]);
+  }, []);
   const [page, setPage] = useState("Inicio"),
     [query, setQuery] = useState(""),
     [category, setCategory] = useState("Todos"),
@@ -228,7 +212,7 @@ export default function App() {
     }
   }, [toast]);
   useEffect(() => {
-    if (!modal || connection !== "ready") return;
+    if (!modal) return;
     const previous = document.activeElement;
     const dialog = document.querySelector("[role=dialog]");
     if (!dialog) return;
@@ -256,8 +240,8 @@ export default function App() {
       document.removeEventListener("keydown", key);
       previous?.focus();
     };
-  }, [modal, connection]);
-  const money = connection === "ready" ? formatMoney : () => "—";
+  }, [modal]);
+  const money = dataReady ? formatMoney : () => "—";
   const products = db.products.filter((p) => !p.deleted);
   const navigate = (p) => {
     setPage(p);
@@ -347,8 +331,8 @@ export default function App() {
     notify("Producto añadido a la venta");
   }
   async function performWrite(operation) {
-    if (connection !== "ready") {
-      notify("Los datos no están conectados. No se guardó ningún cambio.");
+    if (!dataReady) {
+      notify("No se pudo guardar el cambio. Inténtalo más tarde.");
       return;
     }
     if (savingRef.current) return;
@@ -527,18 +511,6 @@ export default function App() {
             <strong>{page}</strong>
           </div>
           <div className="top-actions">
-            <span className="demo-label">
-              <i
-                style={{
-                  background: connection === "ready" ? "#15a575" : "#e9a23b",
-                }}
-              />
-              {connection === "ready"
-                ? "Datos conectados"
-                : connection === "loading"
-                  ? "Conectando datos…"
-                  : "Datos sin conexión"}
-            </span>
             <button
               className="notification icon-button"
               aria-label="Ver alertas"
@@ -550,25 +522,6 @@ export default function App() {
           </div>
         </header>
         <main>
-          {connection === "loading" && (
-            <div className="data-status" role="status">
-              <LoaderCircle className="spin" size={18} />
-              Cargando datos de la tienda…
-            </div>
-          )}
-          {connection === "error" && (
-            <div className="data-status data-status-error" role="alert">
-              <div>
-                <strong>No se pudieron cargar los datos.</strong>
-                <p>{connectionError}</p>
-              </div>
-              <button className="button" onClick={() => setRetry((n) => n + 1)}>
-                <RefreshCw size={16} />
-                Reconectar
-              </button>
-            </div>
-          )}
-
           {page === "Inicio" ? (
             <>
               <Header
@@ -625,7 +578,7 @@ export default function App() {
                 />
                 <Stat
                   label="Ventas realizadas"
-                  value={connection === "ready" ? sales.length : "—"}
+                  value={dataReady ? sales.length : "—"}
                   icon={ShoppingBag}
                   color="blue"
                   detail={
@@ -639,7 +592,7 @@ export default function App() {
                 />
                 <Stat
                   label="Productos en stock"
-                  value={connection === "ready" ? units : "—"}
+                  value={dataReady ? units : "—"}
                   icon={Package}
                   color="orange"
                   detail={
@@ -1027,7 +980,7 @@ export default function App() {
                     </div>
                     <button
                       className="button primary full"
-                      disabled={!cart.length || connection !== "ready"}
+                      disabled={!cart.length || !dataReady}
                       onClick={checkout}
                     >
                       <Check size={18} />
@@ -1073,7 +1026,7 @@ export default function App() {
                 />
                 <Stat
                   label="Ventas completadas"
-                  value={connection === "ready" ? sales.length : "—"}
+                  value={dataReady ? sales.length : "—"}
                   icon={ReceiptText}
                   color="blue"
                   detail="Cobros registrados"
@@ -1099,7 +1052,7 @@ export default function App() {
                 <button
                   className="button"
                   onClick={exportData}
-                  disabled={connection !== "ready"}
+                  disabled={!dataReady}
                 >
                   <Download size={16} />
                   Exportar CSV
@@ -1107,7 +1060,7 @@ export default function App() {
                 <button
                   className="button pdf-export"
                   onClick={exportPDF}
-                  disabled={connection !== "ready"}
+                  disabled={!dataReady}
                 >
                   <FileDown size={17} />
                   Exportar PDF
@@ -1379,7 +1332,7 @@ export default function App() {
                   <button
                     className="button primary"
                     type="submit"
-                    disabled={connection !== "ready" || saving}
+                    disabled={!dataReady || saving}
                   >
                     Guardar {modal.type === "product" ? "producto" : "cambios"}
                   </button>

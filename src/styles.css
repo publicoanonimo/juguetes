@@ -311,19 +311,6 @@ nav button.active:before {
   align-items: center;
   gap: 24px;
 }
-.demo-label {
-  font-size: 12px;
-  color: #8d8b9a;
-  display: flex;
-  align-items: center;
-  gap: 7px;
-}
-.demo-label i {
-  height: 5px;
-  width: 5px;
-  border-radius: 50%;
-  background: #15a575;
-}
 .icon-button {
   display: inline-flex;
   align-items: center;
@@ -1570,9 +1557,6 @@ tr:last-child td {
   .top-actions {
     gap: 15px;
   }
-  .demo-label {
-    display: none;
-  }
   .page-heading {
     align-items: flex-start;
   }
@@ -2235,40 +2219,5 @@ select {
 @media (prefers-reduced-motion: reduce) {
   .spin {
     animation: none;
-  }
-}
-
-.data-status {
-  display: flex;
-  align-items: center;
-  gap: 12px;
-  margin-bottom: 22px;
-  padding: 14px 18px;
-  border-radius: 9px;
-  background: #e0f2fe;
-  border: 1px solid #bae6fd;
-  color: #0369a1;
-  font-size: 12px;
-}
-.data-status-error {
-  justify-content: space-between;
-  background: #fff8ed;
-  border-color: #f6d9aa;
-  color: #94621c;
-}
-.data-status-error strong {
-  font-size: 13px;
-}
-.data-status-error p {
-  font-size: 12px;
-  margin-top: 4px;
-}
-.data-status-error .button {
-  flex-shrink: 0;
-}
-@media (max-width: 720px) {
-  .data-status-error {
-    align-items: flex-start;
-    flex-direction: column;
   }
 }

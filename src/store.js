@@ -152,7 +152,7 @@ export function createSale(cart, customerId, payment) {
 
 export function firebaseMessage(error) {
   if (error?.code === "permission-denied")
-    return "La base de datos rechazó el acceso. Sus permisos deben permitir la lectura y el guardado desde esta web.";
+    return "No se pudo guardar el cambio. Inténtalo más tarde.";
   if (error?.code === "unavailable")
     return "No se pudo conectar con Firebase. Revisa tu conexión e inténtalo de nuevo.";
   if (error?.code === "resource-exhausted")
