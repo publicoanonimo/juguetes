@@ -1,45 +1,19 @@
 rules_version = '2';
+
 service cloud.firestore {
   match /databases/{database}/documents {
-    function validProduct(id) {
-      let p = request.resource.data;
-      return p.id == id && p.name is string && p.name.size() > 0
-        && p.sku is string && p.sku.size() > 0 && p.sku.size() <= 64
-        && p.brand is string && p.category is string && p.age is string
-        && p.price is number && p.price >= 0 && p.cost is number && p.cost >= 0
-        && p.stock is int && p.stock >= 0 && p.min is int && p.min >= 0
-        && p.deleted is bool && p.version is int;
+    match /costumeRegistrations/{registrationId} {
+      allow create, read, update, delete: if true;
     }
-    function validSupplier(id) {
-      let s = request.resource.data;
-      return s.id == id && s.name is string && s.name.size() > 0
-        && s.email is string && s.phone is string && s.country is string
-        && s.deleted is bool && s.version is int;
+
+    match /posProducts/{productId} {
+      allow read, create, update, delete: if true;
     }
-    match /tiendas/principal/productos/{id} {
-      allow read: if true;
-      allow create: if validProduct(id) && request.resource.data.version == 1;
-      allow update: if validProduct(id) && request.resource.data.version == resource.data.version + 1;
-      allow delete: if false;
+
+    match /posSales/{saleId} {
+      allow read, create, update, delete: if true;
     }
-    match /tiendas/principal/proveedores/{id} {
-      allow read: if true;
-      allow create: if validSupplier(id) && request.resource.data.version == 1;
-      allow update: if validSupplier(id) && request.resource.data.version == resource.data.version + 1;
-      allow delete: if false;
-    }
-    match /tiendas/principal/ventas/{id} {
-      allow read: if true;
-      allow create: if request.resource.data.id == id
-        && request.resource.data.date is string
-        && request.resource.data.payment in ['QR', 'Efectivo']
-        && request.resource.data.items is list && request.resource.data.items.size() > 0;
-      allow update, delete: if false;
-    }
-    match /tiendas/principal/skus/{id} {
-      allow read, delete: if true;
-      allow create, update: if request.resource.data.productId is string;
-    }
+
     match /{document=**} {
       allow read, write: if false;
     }

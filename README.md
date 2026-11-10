@@ -22,7 +22,7 @@ npm test          # Pruebas de negocio, PDF y operaciones de venta
 La configuración del proyecto `bdjuguetes-b5829` ya está en `src/firebase.js`. Solo se inicializan la aplicación Firebase y Cloud Firestore.
 
 1. En la [consola de Firebase](https://console.firebase.google.com/project/bdjuguetes-b5829/firestore), crea la base de datos Cloud Firestore predeterminada si todavía no existe.
-2. En **Firestore → Reglas**, pega el contenido completo de [firestore.rules](./firestore.rules) y pulsa **Publicar**. Si publicaste las reglas anteriores, debes reemplazarlas: las nuevas ya no requieren usuarios ni autenticación.
+2. En **Firestore → Reglas**, pega el contenido completo de [firestore.rules](./firestore.rules) y pulsa **Publicar**. Si publicaste las reglas anteriores, debes reemplazarlas: el archivo usa exactamente las tres colecciones indicadas: `costumeRegistrations`, `posProducts` y `posSales`.
 3. Abre la web para crear, editar y borrar productos y proveedores, y registrar ventas.
 
 Con Firebase CLI, las reglas también pueden publicarse mediante:
@@ -33,16 +33,18 @@ firebase deploy --only firestore:rules --project bdjuguetes-b5829
 
 El push a GitHub actualiza el código en Vercel; las reglas de Firestore se publican por separado. La aplicación no necesita configuración de Authentication ni documentos de usuarios.
 
-**Acceso sin autenticación:** cualquier persona que acceda a la web puede consultar y modificar los datos de la tienda. Las reglas permiten estas operaciones en las colecciones de la aplicación y mantienen validaciones de formato, cantidades y versiones.
+**Acceso sin autenticación:** cualquier persona que acceda a la web puede consultar y modificar los datos de la tienda. Las reglas son exactamente las proporcionadas, sin validaciones ni condiciones adicionales. La aplicación mantiene sus comprobaciones de datos y stock al guardar.
 
 ## Datos
 
-| Ruta                                 | Contenido                                                    |
-| ------------------------------------ | ------------------------------------------------------------ |
-| `tiendas/principal/productos/{id}`   | Productos, precios, costos y existencias                     |
-| `tiendas/principal/ventas/{id}`      | Ventas con fecha, hora, pago, cantidades y costos históricos |
-| `tiendas/principal/proveedores/{id}` | Contactos de proveedores                                     |
-| `tiendas/principal/skus/{sku}`       | Reserva de SKU para evitar productos duplicados              |
+| Ruta                                 | Contenido                                                                          |
+| ------------------------------------ | ---------------------------------------------------------------------------------- |
+| `posProducts/{id}`                   | Productos, precios, costos y existencias                                           |
+| `posSales/{id}`                      | Ventas con fecha, hora, pago y cantidades                                          |
+| `costumeRegistrations/supplier-{id}` | Proveedores, identificados con `recordType: "supplier"`                            |
+| `posProducts/_sku_{sku}`             | Reservas de SKU, con `recordType: "skuReservation"`; no se muestran como productos |
+
+Los proveedores se consultan por su tipo para no mezclar ni modificar otros registros existentes en `costumeRegistrations`. No se usan subcolecciones ni rutas `tiendas/principal`, `usuarios` o `skus`. Las reservas de SKU viven dentro de `posProducts` para conservar la detección de duplicados sin necesitar otras reglas.
 
 Los cambios se reciben en tiempo real. Al cobrar, una transacción guarda la venta y descuenta existencias conjuntamente. Si no hay stock suficiente, el cobro se rechaza. Las ediciones y borrados detectan cambios simultáneos de otra sesión.
 

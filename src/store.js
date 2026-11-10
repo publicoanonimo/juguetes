@@ -3,6 +3,8 @@ import {
   doc,
   onSnapshot,
   runTransaction,
+  query,
+  where,
 } from "firebase/firestore";
 import { firestore } from "./firebase.js";
 import { uid } from "./data.js";
@@ -12,9 +14,13 @@ import {
   prepareSupplier,
 } from "./store-operations.js";
 
-const path = (...parts) => ["tiendas", "principal", ...parts];
-const ref = (kind, id) => doc(firestore, ...path(kind, id));
-const skuId = (sku) => encodeURIComponent(sku.trim().toLowerCase());
+import {
+  storeCollections,
+  skuDocumentId,
+  visibleRecords,
+} from "./store-schema.js";
+const ref = (kind, id) => doc(firestore, storeCollections[kind], id);
+const skuId = skuDocumentId;
 export const emptyStore = () => ({
   products: [],
   suppliers: [],
@@ -33,13 +39,21 @@ export function subscribeStore(onChange, onError) {
   };
   const stops = Object.entries(sources).map(([source, key]) =>
     onSnapshot(
-      collection(firestore, ...path(source)),
+      source === "proveedores"
+        ? query(
+            collection(firestore, storeCollections[source]),
+            where("recordType", "==", "supplier"),
+          )
+        : collection(firestore, storeCollections[source]),
       { includeMetadataChanges: true },
       (snapshot) => {
         if (failed) return;
         // Wait for the server before treating an empty local cache as real data.
         if (snapshot.metadata.fromCache) return;
-        data[key] = snapshot.docs.map((d) => ({ ...d.data(), id: d.id }));
+        data[key] = visibleRecords(
+          source,
+          snapshot.docs.map((d) => ({ ...d.data(), id: d.id })),
+        );
         loaded.add(key);
         if (loaded.size === 3) onChange({ ...data });
       },
@@ -69,9 +83,10 @@ export async function saveProduct(fields, existing) {
       throw Error("El SKU ya está en uso.");
     if (current.exists() && skuId(current.data().sku) !== skuId(product.sku))
       tx.delete(ref("skus", skuId(current.data().sku)));
-    tx.set(skuRef, { productId: productRef.id });
+    tx.set(skuRef, { recordType: "skuReservation", productId: productRef.id });
     tx.set(productRef, {
       ...product,
+      recordType: "product",
       id: productRef.id,
       color: current.data()?.color || "#e0f2fe",
       deleted: false,
@@ -82,7 +97,7 @@ export async function saveProduct(fields, existing) {
 
 export function saveSupplier(fields, existing) {
   const supplier = prepareSupplier(fields);
-  const supplierRef = ref("proveedores", existing?.id || uid());
+  const supplierRef = ref("proveedores", existing?.id || `supplier-${uid()}`);
   return runTransaction(firestore, async (tx) => {
     const current = await tx.get(supplierRef);
     if (existing && (!current.exists() || current.data().deleted))
@@ -93,6 +108,7 @@ export function saveSupplier(fields, existing) {
       );
     tx.set(supplierRef, {
       ...supplier,
+      recordType: "supplier",
       id: supplierRef.id,
       deleted: false,
       version: (current.data()?.version || 0) + 1,
